@@ -5,6 +5,7 @@ receivers:
         endpoint: 0.0.0.0:4317
       http:
         endpoint: 0.0.0.0:4318
+
   prometheus:
     config:
       global:
@@ -12,19 +13,33 @@ receivers:
       scrape_configs:
         - job_name: otel-collector
           static_configs:
-          - targets:
-              - localhost:8888
-            labels:
-              job_name: otel-collector
+            - targets:
+                - localhost:8888
+              labels:
+                job_name: otel-collector
+
+  # NEW: syslog receiver
+  syslog:
+    tcp:
+      listen_address: "0.0.0.0:54527"
+    protocol: rfc3164
+    location: UTC
+    operators:
+      - type: move
+        from: attributes.message
+        to: body
+
 processors:
   batch:
     send_batch_size: 10000
     send_batch_max_size: 11000
     timeout: 10s
+
   resourcedetection:
     # Using OTEL_RESOURCE_ATTRIBUTES envvar, env detector adds custom labels.
     detectors: [env, system]
     timeout: 2s
+
   signozspanmetrics/delta:
     metrics_exporter: signozclickhousemetrics
     metrics_flush_interval: 60s
@@ -50,22 +65,27 @@ processors:
       - name: host.name
       - name: host.type
       - name: container.name
+
 extensions:
   health_check:
     endpoint: 0.0.0.0:13133
   pprof:
     endpoint: 0.0.0.0:1777
+
 exporters:
   clickhousetraces:
     datasource: tcp://clickhouse:9000/signoz_traces
     low_cardinal_exception_grouping: ${env:LOW_CARDINAL_EXCEPTION_GROUPING}
     use_new_schema: true
+
   signozclickhousemetrics:
     dsn: tcp://clickhouse:9000/signoz_metrics
+
   clickhouselogsexporter:
     dsn: tcp://clickhouse:9000/signoz_logs
     timeout: 10s
     use_new_schema: true
+
 service:
   telemetry:
     logs:
@@ -78,15 +98,19 @@ service:
       receivers: [otlp]
       processors: [signozspanmetrics/delta, batch]
       exporters: [clickhousetraces]
+
     metrics:
       receivers: [otlp]
       processors: [batch]
       exporters: [signozclickhousemetrics]
+
     metrics/prometheus:
       receivers: [prometheus]
       processors: [batch]
       exporters: [signozclickhousemetrics]
+
     logs:
-      receivers: [otlp]
+      # NEW: include syslog alongside otlp
+      receivers: [otlp, syslog]
       processors: [batch]
       exporters: [clickhouselogsexporter]
