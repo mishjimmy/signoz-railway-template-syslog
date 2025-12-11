@@ -1,4 +1,13 @@
 FROM signoz/signoz-otel-collector:latest
 
+# Copy your custom collector config
 COPY ./otel-collector-config.yaml /etc/otel-collector-config.yaml
+
+# Copy the OpAMP manager config if your deployment uses it
 COPY signoz/otel-collector-opamp-config.yaml /etc/manager-config.yaml
+
+# Expose OTLP ports + syslog port for ingestion
+EXPOSE 4317 4318 54527
+
+# Run collector using your custom config file
+CMD ["--config=/etc/otel-collector-config.yaml"]
